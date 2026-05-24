@@ -1,4 +1,4 @@
-const CACHE_NAME = "gestao-qr-iva-v2";
+const CACHE_NAME = "gestao-zaratini-v3";
 const ASSETS = ["./", "index.html", "styles.css", "app.js", "manifest.json", "icon.svg", "vendor/jsQR.js"];
 
 self.addEventListener("install", (event) => {

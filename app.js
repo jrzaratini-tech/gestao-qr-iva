@@ -1,4 +1,12 @@
 const STORAGE_KEY = "gestao-qr-iva-state-v1";
+const FIREBASE_CONFIG = {
+  apiKey: "AIzaSyD2IxJjHcAS-R4EwF8iZxhuLCMdu0cYLnE",
+  authDomain: "gestao-qr-iva.firebaseapp.com",
+  projectId: "gestao-qr-iva",
+  storageBucket: "gestao-qr-iva.firebasestorage.app",
+  messagingSenderId: "270531006586",
+  appId: "1:270531006586:web:8d3f9106b9b236cea72bc3",
+};
 
 const defaultCategories = [
   "Combustivel",
@@ -19,6 +27,11 @@ let cameraStream = null;
 let scanTimer = null;
 let scanFrame = null;
 let deferredInstallPrompt = null;
+let db = null;
+let cloudUnsubscribe = null;
+let cloudReady = false;
+let cloudSaveTimer = null;
+let applyingCloudState = false;
 
 const els = {
   screens: document.querySelectorAll(".screen"),
@@ -47,6 +60,12 @@ const els = {
   searchInput: document.querySelector("#searchInput"),
   categoryOptions: document.querySelector("#categoryOptions"),
   installButton: document.querySelector("#installButton"),
+  syncStatus: document.querySelector("#syncStatus"),
+  syncBanner: document.querySelector("#syncBanner"),
+  barChart: document.querySelector("#barChart"),
+  nextVatDeadline: document.querySelector("#nextVatDeadline"),
+  vatDeadlineText: document.querySelector("#vatDeadlineText"),
+  vatRegimeBadge: document.querySelector("#vatRegimeBadge"),
 };
 
 const fields = {
@@ -65,6 +84,8 @@ const fields = {
   notes: document.querySelector("#notes"),
   userName: document.querySelector("#userName"),
   ownNif: document.querySelector("#ownNif"),
+  syncKey: document.querySelector("#syncKey"),
+  vatPeriodicity: document.querySelector("#vatPeriodicity"),
   currency: document.querySelector("#currency"),
 };
 
@@ -75,6 +96,7 @@ function init() {
   hydrateSettings();
   renderCategories();
   renderAll();
+  initCloudSync();
   if ("serviceWorker" in navigator) {
     navigator.serviceWorker.register("sw.js").catch(() => {});
   }
@@ -138,7 +160,7 @@ function shiftMonth(delta) {
 
 function loadState() {
   const fallback = {
-    settings: { userName: "", ownNif: "", currency: "EUR" },
+    settings: { userName: "", ownNif: "", syncKey: "", vatPeriodicity: "quarterly", currency: "EUR" },
     documents: [],
     categories: defaultCategories,
   };
@@ -151,11 +173,14 @@ function loadState() {
 
 function persist() {
   localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+  scheduleCloudSave();
 }
 
 function hydrateSettings() {
   fields.userName.value = state.settings.userName || "";
   fields.ownNif.value = state.settings.ownNif || "";
+  fields.syncKey.value = state.settings.syncKey || "";
+  fields.vatPeriodicity.value = state.settings.vatPeriodicity || "quarterly";
   fields.currency.value = state.settings.currency || "EUR";
 }
 
@@ -164,9 +189,12 @@ function saveSettings(event) {
   state.settings = {
     userName: fields.userName.value.trim(),
     ownNif: onlyDigits(fields.ownNif.value),
+    syncKey: normalizeSyncKey(fields.syncKey.value),
+    vatPeriodicity: fields.vatPeriodicity.value || "quarterly",
     currency: (fields.currency.value || "EUR").trim().toUpperCase(),
   };
   persist();
+  initCloudSync(true);
   renderAll();
   navigate("dashboard");
 }
@@ -197,6 +225,8 @@ function renderDashboard() {
     : totals.vatDue < 0
       ? "IVA estimado a receber"
       : "IVA equilibrado no periodo";
+  renderBarChart(totals);
+  renderVatDeadline();
 
   const recent = docs.sort((a, b) => b.createdAt.localeCompare(a.createdAt)).slice(0, 4);
   renderDocumentCollection(els.recentList, recent, "Sem lancamentos neste mes.");
@@ -329,6 +359,17 @@ function saveEntry(event) {
   if (!doc.vatTotal && doc.grossTotal && doc.netTotal) doc.vatTotal = round(doc.grossTotal - doc.netTotal);
   if (doc.category && !state.categories.includes(doc.category)) state.categories.push(doc.category);
 
+  if (!state.settings.ownNif) {
+    alert("Configure primeiro o seu NIF em Config. O app so aceita documentos ligados ao NIF configurado.");
+    navigate("settings");
+    return;
+  }
+
+  if (!documentMatchesOwnNif(doc)) {
+    alert("Este documento nao corresponde ao NIF configurado. Para despesas, o NIF adquirente deve ser o seu NIF. Para faturamento, o NIF emitente deve ser o seu NIF.");
+    return;
+  }
+
   const duplicate = findDuplicate(doc);
   if (duplicate && duplicate.id !== editingId && !confirm("Este documento parece ja existir. Quer guardar mesmo assim?")) {
     return;
@@ -411,6 +452,18 @@ function applyParsedQr(raw) {
   fields.category.value = parsed.entryType === "income" ? "Vendas" : "";
   setEntryType(parsed.entryType);
   checkDuplicate();
+  const duplicate = findDuplicate({
+    issuerNif: parsed.issuerNif,
+    docType: parsed.docType,
+    docNumber: parsed.docNumber,
+    docDate: parsed.docDate,
+    grossTotal: parsed.grossTotal,
+  });
+  if (duplicate) {
+    alert("Esta nota ja esta registrada. O app abriu o documento existente para conferencia.");
+    editDocument(duplicate.id);
+    return;
+  }
   navigate("entry");
 }
 
@@ -564,6 +617,185 @@ function renderCategories() {
   });
 }
 
+async function initCloudSync(forceRestart = false) {
+  if (cloudUnsubscribe && forceRestart) {
+    cloudUnsubscribe();
+    cloudUnsubscribe = null;
+    cloudReady = false;
+  }
+
+  if (!state.settings.syncKey) {
+    updateSyncStatus("Modo local. Configure uma chave de sincronizacao em Config.", false);
+    return;
+  }
+
+  if (!window.firebase?.firestore || !window.firebase?.auth) {
+    updateSyncStatus("Sincronizacao indisponivel. Verifique a ligacao a internet.", false);
+    return;
+  }
+
+  try {
+    if (!firebase.apps.length) firebase.initializeApp(FIREBASE_CONFIG);
+    db = firebase.firestore();
+    await firebase.auth().signInAnonymously();
+    const ref = cloudStateRef();
+    updateSyncStatus("A sincronizar com Firebase...", false);
+
+    if (!cloudUnsubscribe) {
+      cloudUnsubscribe = ref.onSnapshot(
+        async (snapshot) => {
+          if (!snapshot.exists) {
+            await saveCloudState();
+            cloudReady = true;
+            updateSyncStatus("Sincronizado em nuvem.", true);
+            return;
+          }
+
+          const cloud = snapshot.data() || {};
+          const cloudDocs = cloud.documents || [];
+          applyingCloudState = true;
+          state.documents = mergeDocuments(state.documents, cloudDocs);
+          state.categories = Array.from(new Set([...(cloud.categories || []), ...state.categories]));
+          state.settings = { ...state.settings, ...(cloud.settings || {}), syncKey: state.settings.syncKey, ownNif: state.settings.ownNif };
+          localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+          hydrateSettings();
+          renderCategories();
+          renderAll();
+          applyingCloudState = false;
+          cloudReady = true;
+          updateSyncStatus("Sincronizado em nuvem.", true);
+          if (state.documents.length > cloudDocs.length) saveCloudState();
+        },
+        (error) => {
+          updateSyncStatus(`Firebase pendente: ${error.message}`, false);
+        },
+      );
+    }
+  } catch (error) {
+    updateSyncStatus(`Firebase pendente: ${error.message}`, false);
+  }
+}
+
+function scheduleCloudSave() {
+  if (applyingCloudState || !cloudReady || !state.settings.syncKey || !db) return;
+  window.clearTimeout(cloudSaveTimer);
+  cloudSaveTimer = window.setTimeout(saveCloudState, 450);
+}
+
+async function saveCloudState() {
+  if (!db || !state.settings.syncKey) return;
+  const cloudSettings = {
+    userName: state.settings.userName || "",
+    vatPeriodicity: state.settings.vatPeriodicity || "quarterly",
+    currency: state.settings.currency || "EUR",
+  };
+  await cloudStateRef().set(
+    {
+      settings: cloudSettings,
+      categories: state.categories,
+      documents: state.documents,
+      updatedAt: firebase.firestore.FieldValue.serverTimestamp(),
+    },
+    { merge: true },
+  );
+}
+
+function cloudStateRef() {
+  return db.collection("workspaces").doc(state.settings.syncKey).collection("state").doc("main");
+}
+
+function mergeDocuments(localDocs, cloudDocs) {
+  const map = new Map();
+  [...cloudDocs, ...localDocs].forEach((doc) => {
+    const current = map.get(doc.id);
+    if (!current || String(doc.updatedAt || doc.createdAt || "").localeCompare(String(current.updatedAt || current.createdAt || "")) >= 0) {
+      map.set(doc.id, doc);
+    }
+  });
+  return Array.from(map.values()).sort((a, b) => (b.createdAt || "").localeCompare(a.createdAt || ""));
+}
+
+function updateSyncStatus(message, online) {
+  if (!els.syncStatus || !els.syncBanner) return;
+  els.syncStatus.textContent = message;
+  els.syncBanner.classList.toggle("online", online);
+}
+
+function documentMatchesOwnNif(doc) {
+  const ownNif = state.settings.ownNif;
+  if (!ownNif) return false;
+  if (doc.entryType === "income") return doc.issuerNif === ownNif;
+  return doc.buyerNif === ownNif;
+}
+
+function renderBarChart(totals) {
+  if (!els.barChart) return;
+  const values = [
+    { label: "Entradas", value: totals.income, className: "income" },
+    { label: "Saidas", value: totals.expense, className: "expense" },
+    { label: "IVA", value: Math.abs(totals.vatDue), className: totals.vatDue >= 0 ? "expense" : "income" },
+  ];
+  const max = Math.max(...values.map((item) => item.value), 1);
+  els.barChart.innerHTML = values.map((item) => {
+    const height = Math.max(8, Math.round((item.value / max) * 100));
+    return `
+      <div class="bar-item">
+        <div class="bar-track"><span class="${item.className}" style="height:${height}%"></span></div>
+        <strong>${money(item.value, state.settings.currency)}</strong>
+        <small>${item.label}</small>
+      </div>
+    `;
+  }).join("");
+}
+
+function renderVatDeadline() {
+  if (!els.nextVatDeadline) return;
+  const deadline = getNextVatDeadline();
+  const regime = state.settings.vatPeriodicity === "monthly" ? "Mensal" : "Trimestral";
+  els.vatRegimeBadge.textContent = regime;
+  els.nextVatDeadline.textContent = `${deadline.label}: ate ${formatDate(deadline.dueDate)}`;
+  els.vatDeadlineText.textContent = `Periodo ${deadline.period}. Prazo baseado no artigo 41 do CIVA: dia 20 do segundo mes seguinte ao periodo. Confirme sempre no Portal das Financas.`;
+}
+
+function getNextVatDeadline(reference = new Date()) {
+  const periodicity = state.settings.vatPeriodicity || "quarterly";
+  const today = new Date(reference.getFullYear(), reference.getMonth(), reference.getDate());
+
+  if (periodicity === "monthly") {
+    let operationDate = new Date(reference.getFullYear(), reference.getMonth() - 1, 1);
+    let dueDate = new Date(operationDate.getFullYear(), operationDate.getMonth() + 2, 20);
+    while (dueDate < today) {
+      operationDate = new Date(operationDate.getFullYear(), operationDate.getMonth() + 1, 1);
+      dueDate = new Date(operationDate.getFullYear(), operationDate.getMonth() + 2, 20);
+    }
+    return {
+      label: "Proxima declaracao mensal",
+      dueDate: toIsoDate(dueDate),
+      period: operationDate.toLocaleDateString("pt-PT", { month: "long", year: "numeric" }),
+    };
+  }
+
+  let quarterStart = new Date(reference.getFullYear(), Math.floor(reference.getMonth() / 3) * 3 - 3, 1);
+  let dueDate = new Date(quarterStart.getFullYear(), quarterStart.getMonth() + 4, 20);
+  while (dueDate < today) {
+    quarterStart = new Date(quarterStart.getFullYear(), quarterStart.getMonth() + 3, 1);
+    dueDate = new Date(quarterStart.getFullYear(), quarterStart.getMonth() + 4, 20);
+  }
+  return {
+    label: "Proxima declaracao trimestral",
+    dueDate: toIsoDate(dueDate),
+    period: `${Math.floor(quarterStart.getMonth() / 3) + 1}. trimestre de ${quarterStart.getFullYear()}`,
+  };
+}
+
+function normalizeSyncKey(value) {
+  return String(value || "")
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9-]+/g, "-")
+    .replace(/^-+|-+$/g, "");
+}
+
 function money(value, currency = "EUR") {
   return new Intl.NumberFormat("pt-PT", { style: "currency", currency: currency || "EUR" }).format(Number(value) || 0);
 }
@@ -578,6 +810,10 @@ function normalizeDate(value) {
   if (/^\d{8}$/.test(clean)) return `${clean.slice(0, 4)}-${clean.slice(4, 6)}-${clean.slice(6, 8)}`;
   if (/^\d{4}-\d{2}-\d{2}$/.test(clean)) return clean;
   return "";
+}
+
+function toIsoDate(date) {
+  return date.toISOString().slice(0, 10);
 }
 
 function toNumber(value) {

@@ -1,11 +1,11 @@
 {
-  "name": "Gestao QR IVA",
-  "short_name": "QR IVA",
+  "name": "Gestao Zaratini",
+  "short_name": "Zaratini",
   "start_url": ".",
   "display": "standalone",
   "background_color": "#eef3f7",
   "theme_color": "#102a43",
-  "description": "App mobile para lancamentos de faturas por QR Code, controlo de IVA e exportacao CSV.",
+  "description": "App mobile para lancamentos de faturas por QR Code, gestao de IVA e exportacao CSV.",
   "icons": [
     {
       "src": "icon.svg",
