@@ -1,0 +1,402 @@
+:root {
+  --bg: #eef3f7;
+  --surface: #ffffff;
+  --ink: #102a43;
+  --muted: #627d98;
+  --line: #d9e2ec;
+  --primary: #0b6e69;
+  --primary-ink: #ffffff;
+  --accent: #f0b429;
+  --danger: #ba2525;
+  --success: #207227;
+  --shadow: 0 14px 32px rgba(16, 42, 67, 0.12);
+  font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  min-height: 100vh;
+  color: var(--ink);
+  background: var(--bg);
+}
+
+button,
+input,
+select,
+textarea {
+  font: inherit;
+}
+
+button {
+  cursor: pointer;
+}
+
+.app-shell {
+  min-height: 100vh;
+  max-width: 720px;
+  margin: 0 auto;
+  padding: env(safe-area-inset-top) 16px calc(86px + env(safe-area-inset-bottom));
+}
+
+.topbar,
+.section-head,
+.period-row,
+.tax-strip,
+.filters {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.topbar {
+  padding: 18px 2px 12px;
+}
+
+h1,
+h2,
+h3,
+p {
+  margin: 0;
+}
+
+h1 {
+  font-size: 28px;
+  line-height: 1.05;
+}
+
+h2 {
+  font-size: 23px;
+}
+
+h3 {
+  font-size: 17px;
+}
+
+.eyebrow {
+  color: var(--primary);
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: 0;
+  text-transform: uppercase;
+}
+
+.muted {
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.screen {
+  display: none;
+}
+
+.screen.active {
+  display: grid;
+  gap: 16px;
+}
+
+.icon-button,
+.text-button,
+.primary-button,
+.secondary-button,
+.bottom-nav button,
+.segmented button {
+  border: 0;
+  border-radius: 8px;
+}
+
+.icon-button {
+  display: grid;
+  place-items: center;
+  width: 42px;
+  height: 42px;
+  color: var(--ink);
+  background: var(--surface);
+  box-shadow: var(--shadow);
+  font-size: 24px;
+  font-weight: 800;
+}
+
+.text-button {
+  padding: 9px 11px;
+  color: var(--primary);
+  background: rgba(11, 110, 105, 0.1);
+  font-weight: 800;
+}
+
+.primary-button,
+.secondary-button {
+  width: 100%;
+  min-height: 50px;
+  padding: 12px 14px;
+  font-weight: 850;
+}
+
+.primary-button {
+  color: var(--primary-ink);
+  background: var(--primary);
+}
+
+.secondary-button {
+  color: var(--primary);
+  background: #d8f3ef;
+}
+
+.iva-card,
+.panel,
+.scanner-box,
+.metric-grid article,
+.tax-strip,
+.list-item,
+.warning {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface);
+}
+
+.iva-card {
+  display: grid;
+  gap: 8px;
+  padding: 20px;
+  box-shadow: var(--shadow);
+}
+
+.iva-card strong {
+  font-size: 34px;
+  line-height: 1;
+}
+
+.iva-card.to-pay {
+  border-color: rgba(186, 37, 37, 0.35);
+}
+
+.iva-card.to-receive {
+  border-color: rgba(32, 114, 39, 0.35);
+}
+
+.metric-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.metric-grid article {
+  display: grid;
+  gap: 6px;
+  min-height: 92px;
+  padding: 14px;
+}
+
+.metric-grid span,
+.tax-strip span {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 750;
+}
+
+.metric-grid strong {
+  font-size: 18px;
+}
+
+.tax-strip {
+  padding: 14px;
+}
+
+.tax-strip div {
+  display: grid;
+  gap: 5px;
+}
+
+.panel {
+  display: grid;
+  gap: 14px;
+  padding: 16px;
+}
+
+.scanner-box {
+  position: relative;
+  display: grid;
+  place-items: center;
+  min-height: 280px;
+  overflow: hidden;
+  background: #102a43;
+  color: #ffffff;
+}
+
+#cameraPreview {
+  width: 100%;
+  height: 100%;
+  min-height: 280px;
+  object-fit: cover;
+}
+
+#scannerHint {
+  position: absolute;
+  inset: auto 18px 18px;
+  display: grid;
+  gap: 4px;
+  padding: 12px;
+  border-radius: 8px;
+  background: rgba(16, 42, 67, 0.82);
+}
+
+.segmented {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 6px;
+  padding: 5px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #d9e2ec;
+}
+
+.segmented button {
+  min-height: 42px;
+  color: var(--muted);
+  background: transparent;
+  font-weight: 850;
+}
+
+.segmented button.active {
+  color: var(--primary-ink);
+  background: var(--primary);
+}
+
+.form-grid {
+  display: grid;
+  gap: 12px;
+}
+
+.field {
+  display: grid;
+  gap: 7px;
+}
+
+.field span {
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 780;
+}
+
+input,
+select,
+textarea {
+  width: 100%;
+  min-height: 46px;
+  padding: 11px 12px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  color: var(--ink);
+  background: var(--surface);
+}
+
+textarea {
+  resize: vertical;
+}
+
+.warning {
+  padding: 12px;
+  color: #7c2d12;
+  background: #fff7ed;
+}
+
+.list {
+  display: grid;
+  gap: 10px;
+}
+
+.list-item {
+  display: grid;
+  gap: 8px;
+  padding: 13px;
+}
+
+.list-item .row {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.badge {
+  display: inline-flex;
+  align-items: center;
+  min-height: 24px;
+  padding: 3px 8px;
+  border-radius: 999px;
+  color: var(--primary);
+  background: rgba(11, 110, 105, 0.1);
+  font-size: 12px;
+  font-weight: 850;
+}
+
+.badge.expense {
+  color: #9a3412;
+  background: #ffedd5;
+}
+
+.badge.income {
+  color: #166534;
+  background: #dcfce7;
+}
+
+.empty-state {
+  color: var(--muted);
+  font-size: 14px;
+}
+
+.bottom-nav {
+  position: fixed;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  gap: 4px;
+  max-width: 720px;
+  margin: 0 auto;
+  padding: 8px 10px calc(8px + env(safe-area-inset-bottom));
+  border-top: 1px solid var(--line);
+  background: rgba(255, 255, 255, 0.96);
+  backdrop-filter: blur(12px);
+}
+
+.bottom-nav button {
+  display: grid;
+  place-items: center;
+  gap: 2px;
+  min-height: 58px;
+  color: var(--muted);
+  background: transparent;
+  font-size: 11px;
+  font-weight: 800;
+}
+
+.bottom-nav span {
+  font-size: 20px;
+  line-height: 1;
+}
+
+.bottom-nav button.active {
+  color: var(--primary);
+  background: rgba(11, 110, 105, 0.1);
+}
+
+@media (min-width: 650px) {
+  .app-shell {
+    padding-right: 22px;
+    padding-left: 22px;
+  }
+
+  .form-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .field.full {
+    grid-column: 1 / -1;
+  }
+}

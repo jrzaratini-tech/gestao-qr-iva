@@ -1,0 +1,17 @@
+{
+  "name": "Gestao QR IVA",
+  "short_name": "QR IVA",
+  "start_url": ".",
+  "display": "standalone",
+  "background_color": "#eef3f7",
+  "theme_color": "#102a43",
+  "description": "App mobile para lancamentos de faturas por QR Code, controlo de IVA e exportacao CSV.",
+  "icons": [
+    {
+      "src": "icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}

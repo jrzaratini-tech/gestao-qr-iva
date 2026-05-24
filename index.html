@@ -1,0 +1,234 @@
+<!doctype html>
+<html lang="pt-PT">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <meta name="theme-color" content="#102a43" />
+    <title>Gestao QR IVA</title>
+    <link rel="manifest" href="manifest.json" />
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <div class="app-shell">
+      <header class="topbar">
+        <div>
+          <p class="eyebrow">Gestao pessoal</p>
+          <h1>Controlo IVA</h1>
+        </div>
+        <button class="icon-button" id="installButton" title="Instalar app" hidden>+</button>
+      </header>
+
+      <main>
+        <section class="screen active" id="dashboardScreen" aria-labelledby="dashboardTitle">
+          <div class="period-row">
+            <button class="icon-button" id="prevMonth" aria-label="Mes anterior">&#8249;</button>
+            <div>
+              <h2 id="dashboardTitle">Painel</h2>
+              <p id="periodLabel" class="muted"></p>
+            </div>
+            <button class="icon-button" id="nextMonth" aria-label="Mes seguinte">&#8250;</button>
+          </div>
+
+          <div class="iva-card" id="ivaCard">
+            <p class="muted">IVA estimado</p>
+            <strong id="ivaBalance">0,00 EUR</strong>
+            <span id="ivaStatus">Sem lancamentos no periodo</span>
+          </div>
+
+          <div class="metric-grid">
+            <article>
+              <span>Entradas</span>
+              <strong id="totalIncome">0,00 EUR</strong>
+            </article>
+            <article>
+              <span>Saidas</span>
+              <strong id="totalExpense">0,00 EUR</strong>
+            </article>
+            <article>
+              <span>Saldo</span>
+              <strong id="operationalBalance">0,00 EUR</strong>
+            </article>
+            <article>
+              <span>Resultado s/ IVA</span>
+              <strong id="netResult">0,00 EUR</strong>
+            </article>
+          </div>
+
+          <div class="tax-strip">
+            <div>
+              <span>IVA liquidado</span>
+              <strong id="vatLiquidated">0,00 EUR</strong>
+            </div>
+            <div>
+              <span>IVA suportado</span>
+              <strong id="vatSupported">0,00 EUR</strong>
+            </div>
+          </div>
+
+          <section class="panel">
+            <div class="section-head">
+              <h3>Ultimos lancamentos</h3>
+              <button class="text-button" data-nav="list">Ver todos</button>
+            </div>
+            <div id="recentList" class="list empty-state"></div>
+          </section>
+        </section>
+
+        <section class="screen" id="scanScreen" aria-labelledby="scanTitle">
+          <div class="section-head">
+            <div>
+              <p class="eyebrow">Entrada rapida</p>
+              <h2 id="scanTitle">Ler fatura</h2>
+            </div>
+            <button class="text-button" id="stopScanner" hidden>Parar</button>
+          </div>
+
+          <div class="scanner-box">
+            <video id="cameraPreview" playsinline muted></video>
+            <div id="scannerHint">
+              <strong>QR Code fiscal</strong>
+              <span>Aponte a camara para a fatura ou cole o conteudo abaixo.</span>
+            </div>
+          </div>
+
+          <button class="primary-button" id="startScanner">Abrir camara</button>
+          <label class="field">
+            <span>Conteudo bruto do QR Code</span>
+            <textarea id="rawQrInput" rows="5" placeholder="Cole aqui o texto lido no QR Code"></textarea>
+          </label>
+          <button class="secondary-button" id="parseQr">Interpretar QR Code</button>
+        </section>
+
+        <section class="screen" id="entryScreen" aria-labelledby="entryTitle">
+          <form id="entryForm">
+            <div class="section-head">
+              <div>
+                <p class="eyebrow">Documento</p>
+                <h2 id="entryTitle">Novo lancamento</h2>
+              </div>
+              <button class="text-button" type="button" id="resetForm">Limpar</button>
+            </div>
+
+            <div class="segmented" role="group" aria-label="Tipo de lancamento">
+              <button type="button" class="active" data-type="expense">Despesa</button>
+              <button type="button" data-type="income">Faturamento</button>
+            </div>
+
+            <div class="form-grid">
+              <label class="field">
+                <span>NIF emitente</span>
+                <input id="issuerNif" inputmode="numeric" autocomplete="off" required />
+              </label>
+              <label class="field">
+                <span>Nome emitente</span>
+                <input id="issuerName" autocomplete="organization" />
+              </label>
+              <label class="field">
+                <span>NIF adquirente</span>
+                <input id="buyerNif" inputmode="numeric" autocomplete="off" />
+              </label>
+              <label class="field">
+                <span>Tipo documento</span>
+                <input id="docType" placeholder="FT, FS, NC..." required />
+              </label>
+              <label class="field">
+                <span>Numero documento</span>
+                <input id="docNumber" required />
+              </label>
+              <label class="field">
+                <span>Data</span>
+                <input id="docDate" type="date" required />
+              </label>
+              <label class="field">
+                <span>Total com IVA</span>
+                <input id="grossTotal" type="number" step="0.01" min="0" required />
+              </label>
+              <label class="field">
+                <span>Total sem IVA</span>
+                <input id="netTotal" type="number" step="0.01" min="0" />
+              </label>
+              <label class="field">
+                <span>IVA total</span>
+                <input id="vatTotal" type="number" step="0.01" min="0" />
+              </label>
+              <label class="field">
+                <span>Categoria</span>
+                <input id="category" list="categoryOptions" placeholder="Combustivel, vendas..." />
+              </label>
+              <label class="field">
+                <span>Estado</span>
+                <select id="paymentStatus">
+                  <option value="paid">Pago/Recebido</option>
+                  <option value="pending">Pendente</option>
+                  <option value="partial">Parcial</option>
+                  <option value="cancelled">Cancelado</option>
+                </select>
+              </label>
+              <label class="field">
+                <span>Metodo</span>
+                <input id="paymentMethod" placeholder="Cartao, dinheiro, transferencia" />
+              </label>
+              <label class="field full">
+                <span>Observacoes</span>
+                <textarea id="notes" rows="3"></textarea>
+              </label>
+            </div>
+
+            <datalist id="categoryOptions"></datalist>
+            <div id="duplicateWarning" class="warning" hidden></div>
+            <button class="primary-button" type="submit">Guardar lancamento</button>
+          </form>
+        </section>
+
+        <section class="screen" id="listScreen" aria-labelledby="listTitle">
+          <div class="section-head">
+            <div>
+              <p class="eyebrow">Historico</p>
+              <h2 id="listTitle">Lancamentos</h2>
+            </div>
+            <button class="text-button" id="exportCsv">CSV</button>
+          </div>
+          <div class="filters">
+            <select id="filterType">
+              <option value="all">Todos</option>
+              <option value="income">Faturamento</option>
+              <option value="expense">Despesa</option>
+            </select>
+            <input id="searchInput" placeholder="Pesquisar NIF, nome ou documento" />
+          </div>
+          <div id="documentList" class="list"></div>
+        </section>
+
+        <section class="screen" id="settingsScreen" aria-labelledby="settingsTitle">
+          <form id="settingsForm" class="panel">
+            <p class="eyebrow">Configuracao</p>
+            <h2 id="settingsTitle">Dados do app</h2>
+            <label class="field">
+              <span>Nome</span>
+              <input id="userName" autocomplete="name" />
+            </label>
+            <label class="field">
+              <span>NIF proprio</span>
+              <input id="ownNif" inputmode="numeric" autocomplete="off" />
+            </label>
+            <label class="field">
+              <span>Moeda</span>
+              <input id="currency" value="EUR" maxlength="3" />
+            </label>
+            <button class="primary-button" type="submit">Guardar configuracao</button>
+          </form>
+        </section>
+      </main>
+
+      <nav class="bottom-nav" aria-label="Navegacao principal">
+        <button class="active" data-nav="dashboard"><span>⌂</span>Painel</button>
+        <button data-nav="scan"><span>□</span>Ler</button>
+        <button data-nav="entry"><span>+</span>Manual</button>
+        <button data-nav="list"><span>≡</span>Lista</button>
+        <button data-nav="settings"><span>⚙</span>Config</button>
+      </nav>
+    </div>
+
+    <script src="app.js"></script>
+  </body>
+</html>

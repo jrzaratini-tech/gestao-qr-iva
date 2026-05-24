@@ -1,0 +1,5 @@
+.firebase/
+.render/
+node_modules/
+dist/
+*.log
