@@ -17,6 +17,7 @@ let currentEntryType = "expense";
 let editingId = null;
 let cameraStream = null;
 let scanTimer = null;
+let scanFrame = null;
 let deferredInstallPrompt = null;
 
 const els = {
@@ -444,26 +445,26 @@ function parsePortugueseFiscalQr(rawValue) {
 }
 
 async function startScanner() {
-  if (!("BarcodeDetector" in window)) {
-    alert("Este navegador nao suporta leitura direta de QR Code. Pode colar o conteudo bruto ou usar outro navegador mobile.");
-    return;
-  }
-
   try {
-    const detector = new BarcodeDetector({ formats: ["qr_code"] });
     cameraStream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" }, audio: false });
     els.cameraPreview.srcObject = cameraStream;
     await els.cameraPreview.play();
     els.stopScanner.hidden = false;
     els.scannerHint.querySelector("span").textContent = "A procurar QR Code...";
 
-    scanTimer = window.setInterval(async () => {
-      const codes = await detector.detect(els.cameraPreview).catch(() => []);
-      if (codes.length) {
-        stopScanner();
-        applyParsedQr(codes[0].rawValue);
-      }
-    }, 700);
+    if ("BarcodeDetector" in window) {
+      const detector = new BarcodeDetector({ formats: ["qr_code"] });
+      scanTimer = window.setInterval(async () => {
+        const codes = await detector.detect(els.cameraPreview).catch(() => []);
+        if (codes.length) {
+          stopScanner();
+          applyParsedQr(codes[0].rawValue);
+        }
+      }, 700);
+      return;
+    }
+
+    startCanvasScanner();
   } catch {
     alert("Nao foi possivel abrir a camara. Verifique permissoes ou use lancamento manual.");
   }
@@ -471,11 +472,46 @@ async function startScanner() {
 
 function stopScanner() {
   if (scanTimer) window.clearInterval(scanTimer);
+  if (scanFrame) window.cancelAnimationFrame(scanFrame);
   scanTimer = null;
+  scanFrame = null;
   if (cameraStream) cameraStream.getTracks().forEach((track) => track.stop());
   cameraStream = null;
   els.stopScanner.hidden = true;
   els.scannerHint.querySelector("span").textContent = "Aponte a camara para a fatura ou cole o conteudo abaixo.";
+}
+
+function startCanvasScanner() {
+  if (typeof jsQR !== "function") {
+    alert("Leitor QR nao carregou. Atualize a pagina e tente novamente.");
+    return;
+  }
+
+  const canvas = document.createElement("canvas");
+  const context = canvas.getContext("2d", { willReadFrequently: true });
+
+  const tick = () => {
+    if (!cameraStream || els.cameraPreview.readyState !== HTMLMediaElement.HAVE_ENOUGH_DATA) {
+      scanFrame = window.requestAnimationFrame(tick);
+      return;
+    }
+
+    canvas.width = els.cameraPreview.videoWidth;
+    canvas.height = els.cameraPreview.videoHeight;
+    context.drawImage(els.cameraPreview, 0, 0, canvas.width, canvas.height);
+    const imageData = context.getImageData(0, 0, canvas.width, canvas.height);
+    const code = jsQR(imageData.data, imageData.width, imageData.height, { inversionAttempts: "dontInvert" });
+
+    if (code?.data) {
+      stopScanner();
+      applyParsedQr(code.data);
+      return;
+    }
+
+    scanFrame = window.requestAnimationFrame(tick);
+  };
+
+  tick();
 }
 
 function exportCsv() {

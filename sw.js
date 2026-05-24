@@ -1,5 +1,5 @@
-const CACHE_NAME = "gestao-qr-iva-v1";
-const ASSETS = ["./", "index.html", "styles.css", "app.js", "manifest.json", "icon.svg"];
+const CACHE_NAME = "gestao-qr-iva-v2";
+const ASSETS = ["./", "index.html", "styles.css", "app.js", "manifest.json", "icon.svg", "vendor/jsQR.js"];
 
 self.addEventListener("install", (event) => {
   event.waitUntil(caches.open(CACHE_NAME).then((cache) => cache.addAll(ASSETS)));
