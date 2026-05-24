@@ -9,14 +9,42 @@ const FIREBASE_CONFIG = {
 };
 
 const defaultCategories = [
-  "Combustivel",
-  "Telecomunicacoes",
-  "Material",
-  "Servicos",
-  "Renda",
-  "Coimas",
-  "Guia de IVA",
-  "Vendas",
+  "ÁGUA",
+  "AMAZON",
+  "ALIMENTAÇÃO",
+  "ARRENDAMENTO",
+  "COMISSÃO",
+  "CONTABILIDADE",
+  "CTT",
+  "COMBUSTÍVEL",
+  "CAFÉ",
+  "DIMATUR",
+  "DAGOL",
+  "ENERGIA",
+  "FILAMENTO 3D",
+  "IMPOSTOS",
+  "LEROY MERLIN",
+  "LUZACRIL",
+  "MANUTENÇÃO",
+  "MATERIAL ESCRITORIO",
+  "MAKRO",
+  "PLOTTERZONE",
+  "POLEGADA LED",
+  "SALÁRIO",
+  "SANTANDER",
+  "TRANSPORTE",
+  "TELEFONE/INTERNET",
+  "WEDDT",
+  "OUTROS",
+  "Logo em Acrílico",
+  "Logo Flutuante para Montra",
+  "Neon LED",
+  "Alto Colante",
+  "Logo 3D com LED",
+  "Logo 3D sem LED",
+  "Brindes",
+  "Painel de ACM",
+  "Caixa de Luz",
 ];
 
 const state = loadState();
@@ -180,6 +208,7 @@ function loadState() {
       ...fallback,
       ...stored,
       settings: { ...fallback.settings, ...(stored.settings || {}) },
+      categories: Array.from(new Set([...(stored.categories || []), ...defaultCategories])),
     };
   } catch {
     return fallback;
@@ -290,6 +319,7 @@ function renderDocumentCollection(container, docs, emptyMessage) {
         <span class="badge ${doc.entryType}">${doc.entryType === "income" ? "Faturamento" : "Despesa"}</span>
         <span class="muted">${escapeHtml(doc.category || "Sem categoria")} - IVA ${money(doc.vatTotal, state.settings.currency)}</span>
       </div>
+      <small class="edit-hint">Toque para rever, corrigir o tipo ou classificar a categoria.</small>
     `;
     item.addEventListener("click", () => editDocument(doc.id));
     container.appendChild(item);
@@ -390,7 +420,11 @@ function saveEntry(event) {
   }
 
   const duplicate = findDuplicate(doc);
-  if (duplicate && duplicate.id !== editingId && !confirm("Este documento parece ja existir. Quer guardar mesmo assim?")) {
+  if (duplicate && duplicate.id !== editingId) {
+    alert("Esta nota ja esta registrada. O lancamento duplicado foi descartado para evitar erro.");
+    resetForm();
+    renderAll();
+    navigate("list");
     return;
   }
 
@@ -459,6 +493,25 @@ function applyParsedQr(raw) {
     alert("Cole ou leia primeiro o conteudo do QR Code.");
     return;
   }
+
+  if (state.settings.ownNif && !documentMatchesOwnNif(parsed)) {
+    discardScannedDocument("Este documento nao corresponde ao NIF configurado. O scan foi descartado e nao pode ser guardado.");
+    return;
+  }
+
+  const duplicate = findDuplicate({
+    issuerNif: parsed.issuerNif,
+    docType: parsed.docType,
+    docNumber: parsed.docNumber,
+    docDate: parsed.docDate,
+    grossTotal: parsed.grossTotal,
+  });
+  if (duplicate) {
+    discardScannedDocument("Esta nota ja esta registrada. O scan foi descartado para evitar duplicacao.");
+    navigate("list");
+    return;
+  }
+
   els.rawQrInput.value = parsed.rawQr;
   fields.issuerNif.value = parsed.issuerNif || "";
   fields.buyerNif.value = parsed.buyerNif || "";
@@ -468,22 +521,18 @@ function applyParsedQr(raw) {
   fields.grossTotal.value = parsed.grossTotal || "";
   fields.netTotal.value = parsed.netTotal || "";
   fields.vatTotal.value = parsed.vatTotal || "";
-  fields.category.value = parsed.entryType === "income" ? "Vendas" : "";
+  fields.category.value = parsed.entryType === "income" ? "Logo em Acrílico" : "";
   setEntryType(parsed.entryType);
   checkDuplicate();
-  const duplicate = findDuplicate({
-    issuerNif: parsed.issuerNif,
-    docType: parsed.docType,
-    docNumber: parsed.docNumber,
-    docDate: parsed.docDate,
-    grossTotal: parsed.grossTotal,
-  });
-  if (duplicate) {
-    alert("Esta nota ja esta registrada. O app abriu o documento existente para conferencia.");
-    editDocument(duplicate.id);
-    return;
-  }
   navigate("entry");
+}
+
+function discardScannedDocument(message) {
+  alert(message);
+  els.rawQrInput.value = "";
+  resetForm();
+  renderAll();
+  navigate("dashboard");
 }
 
 function parsePortugueseFiscalQr(rawValue) {
