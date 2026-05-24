@@ -86,6 +86,8 @@ const fields = {
   ownNif: document.querySelector("#ownNif"),
   syncKey: document.querySelector("#syncKey"),
   vatPeriodicity: document.querySelector("#vatPeriodicity"),
+  activityStartDate: document.querySelector("#activityStartDate"),
+  activityProfile: document.querySelector("#activityProfile"),
   currency: document.querySelector("#currency"),
 };
 
@@ -160,12 +162,25 @@ function shiftMonth(delta) {
 
 function loadState() {
   const fallback = {
-    settings: { userName: "", ownNif: "", syncKey: "", vatPeriodicity: "quarterly", currency: "EUR" },
+    settings: {
+      userName: "",
+      ownNif: "",
+      syncKey: "",
+      vatPeriodicity: "quarterly",
+      activityStartDate: "2026-05-06",
+      activityProfile: "Design, impressao e producao",
+      currency: "EUR",
+    },
     documents: [],
     categories: defaultCategories,
   };
   try {
-    return { ...fallback, ...JSON.parse(localStorage.getItem(STORAGE_KEY) || "{}") };
+    const stored = JSON.parse(localStorage.getItem(STORAGE_KEY) || "{}");
+    return {
+      ...fallback,
+      ...stored,
+      settings: { ...fallback.settings, ...(stored.settings || {}) },
+    };
   } catch {
     return fallback;
   }
@@ -181,6 +196,8 @@ function hydrateSettings() {
   fields.ownNif.value = state.settings.ownNif || "";
   fields.syncKey.value = state.settings.syncKey || "";
   fields.vatPeriodicity.value = state.settings.vatPeriodicity || "quarterly";
+  fields.activityStartDate.value = state.settings.activityStartDate || "2026-05-06";
+  fields.activityProfile.value = state.settings.activityProfile || "Design, impressao e producao";
   fields.currency.value = state.settings.currency || "EUR";
 }
 
@@ -191,6 +208,8 @@ function saveSettings(event) {
     ownNif: onlyDigits(fields.ownNif.value),
     syncKey: normalizeSyncKey(fields.syncKey.value),
     vatPeriodicity: fields.vatPeriodicity.value || "quarterly",
+    activityStartDate: fields.activityStartDate.value || "2026-05-06",
+    activityProfile: fields.activityProfile.value.trim() || "Design, impressao e producao",
     currency: (fields.currency.value || "EUR").trim().toUpperCase(),
   };
   persist();
@@ -656,7 +675,12 @@ async function initCloudSync(forceRestart = false) {
           applyingCloudState = true;
           state.documents = mergeDocuments(state.documents, cloudDocs);
           state.categories = Array.from(new Set([...(cloud.categories || []), ...state.categories]));
-          state.settings = { ...state.settings, ...(cloud.settings || {}), syncKey: state.settings.syncKey, ownNif: state.settings.ownNif };
+          state.settings = {
+            ...state.settings,
+            ...(cloud.settings || {}),
+            syncKey: state.settings.syncKey,
+            ownNif: state.settings.ownNif,
+          };
           localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
           hydrateSettings();
           renderCategories();
@@ -687,6 +711,8 @@ async function saveCloudState() {
   const cloudSettings = {
     userName: state.settings.userName || "",
     vatPeriodicity: state.settings.vatPeriodicity || "quarterly",
+    activityStartDate: state.settings.activityStartDate || "2026-05-06",
+    activityProfile: state.settings.activityProfile || "Design, impressao e producao",
     currency: state.settings.currency || "EUR",
   };
   await cloudStateRef().set(
@@ -754,7 +780,7 @@ function renderVatDeadline() {
   const regime = state.settings.vatPeriodicity === "monthly" ? "Mensal" : "Trimestral";
   els.vatRegimeBadge.textContent = regime;
   els.nextVatDeadline.textContent = `${deadline.label}: ate ${formatDate(deadline.dueDate)}`;
-  els.vatDeadlineText.textContent = `Periodo ${deadline.period}. Prazo baseado no artigo 41 do CIVA: dia 20 do segundo mes seguinte ao periodo. Confirme sempre no Portal das Financas.`;
+  els.vatDeadlineText.textContent = `${state.settings.activityProfile || "Atividade profissional"} - periodo ${deadline.period}. Prazo pelo artigo 41 do CIVA, com regra especial de setembro para junho/2. trimestre. Confirme sempre no Portal das Financas.`;
 }
 
 function getNextVatDeadline(reference = new Date()) {
@@ -763,29 +789,59 @@ function getNextVatDeadline(reference = new Date()) {
 
   if (periodicity === "monthly") {
     let operationDate = new Date(reference.getFullYear(), reference.getMonth() - 1, 1);
-    let dueDate = new Date(operationDate.getFullYear(), operationDate.getMonth() + 2, 20);
+    let dueDate = monthlyVatDueDate(operationDate);
     while (dueDate < today) {
       operationDate = new Date(operationDate.getFullYear(), operationDate.getMonth() + 1, 1);
-      dueDate = new Date(operationDate.getFullYear(), operationDate.getMonth() + 2, 20);
+      dueDate = monthlyVatDueDate(operationDate);
     }
     return {
       label: "Proxima declaracao mensal",
       dueDate: toIsoDate(dueDate),
-      period: operationDate.toLocaleDateString("pt-PT", { month: "long", year: "numeric" }),
+      period: `${formatPeriodStart(operationDate)} a ${formatPeriodEnd(endOfMonth(operationDate))}`,
     };
   }
 
   let quarterStart = new Date(reference.getFullYear(), Math.floor(reference.getMonth() / 3) * 3 - 3, 1);
-  let dueDate = new Date(quarterStart.getFullYear(), quarterStart.getMonth() + 4, 20);
+  let dueDate = quarterlyVatDueDate(quarterStart);
   while (dueDate < today) {
     quarterStart = new Date(quarterStart.getFullYear(), quarterStart.getMonth() + 3, 1);
-    dueDate = new Date(quarterStart.getFullYear(), quarterStart.getMonth() + 4, 20);
+    dueDate = quarterlyVatDueDate(quarterStart);
   }
+  const periodStart = clampActivityStart(quarterStart);
+  const quarterEnd = new Date(quarterStart.getFullYear(), quarterStart.getMonth() + 3, 0);
   return {
     label: "Proxima declaracao trimestral",
     dueDate: toIsoDate(dueDate),
-    period: `${Math.floor(quarterStart.getMonth() / 3) + 1}. trimestre de ${quarterStart.getFullYear()}`,
+    period: `${Math.floor(quarterStart.getMonth() / 3) + 1}. trimestre de ${quarterStart.getFullYear()} (${formatPeriodStart(periodStart)} a ${formatPeriodEnd(quarterEnd)})`,
   };
+}
+
+function monthlyVatDueDate(monthStart) {
+  if (monthStart.getMonth() === 5) return new Date(monthStart.getFullYear(), 8, 20);
+  return new Date(monthStart.getFullYear(), monthStart.getMonth() + 2, 20);
+}
+
+function quarterlyVatDueDate(quarterStart) {
+  if (quarterStart.getMonth() === 3) return new Date(quarterStart.getFullYear(), 8, 20);
+  return new Date(quarterStart.getFullYear(), quarterStart.getMonth() + 4, 20);
+}
+
+function clampActivityStart(periodStart) {
+  const activityStart = state.settings.activityStartDate ? new Date(`${state.settings.activityStartDate}T00:00:00`) : null;
+  if (!activityStart || Number.isNaN(activityStart.getTime())) return periodStart;
+  return activityStart > periodStart ? activityStart : periodStart;
+}
+
+function endOfMonth(date) {
+  return new Date(date.getFullYear(), date.getMonth() + 1, 0);
+}
+
+function formatPeriodStart(date) {
+  return date.toLocaleDateString("pt-PT");
+}
+
+function formatPeriodEnd(date) {
+  return date.toLocaleDateString("pt-PT");
 }
 
 function normalizeSyncKey(value) {
